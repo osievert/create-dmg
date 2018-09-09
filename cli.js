@@ -18,7 +18,10 @@ const cli = meow(`
 	  $ create-dmg <app> [destination]
 
 	Options
-	  --overwrite  Overwrite existing DMG with the same name
+	  --overwrite      Overwrite existing DMG with the same name
+	  --identity <id>  Filter term to match an exact signing identity
+	                   Get this from "security find-identity -v -p codesigning".
+	                   <id> will be something like "Mac Developer: John Smith (132ASDLFD)".
 
 	Examples
 	  $ create-dmg 'Lungo.app'
@@ -27,6 +30,9 @@ const cli = meow(`
 	flags: {
 		overwrite: {
 			type: 'boolean'
+		},
+		identity: {
+			type: 'string'
 		}
 	}
 });
@@ -115,15 +121,19 @@ ee.on('finish', async () => {
 
 	try {
 		let identity;
-		const {stdout} = await execa('security', ['find-identity', '-v', '-p', 'codesigning']);
-		if (stdout.includes('Developer ID Application:')) {
-			identity = 'Developer ID Application';
-		} else if (stdout.includes('Mac Developer:')) {
-			identity = 'Mac Developer';
+		if (cli.flags.identity) {
+			identity = cli.flags.identity;
 		} else {
-			const err = new Error();
-			err.stderr = 'No usable identity found';
-			throw err;
+			const {stdout} = await execa('security', ['find-identity', '-v', '-p', 'codesigning']);
+			if (stdout.includes('Developer ID Application:')) {
+				identity = 'Developer ID Application';
+			} else if (stdout.includes('Mac Developer:')) {
+				identity = 'Mac Developer';
+			} else {
+				const err = new Error();
+				err.stderr = 'No usable identity found';
+				throw err;
+			}
 		}
 
 		await execa('codesign', ['--sign', identity, dmgPath]);
